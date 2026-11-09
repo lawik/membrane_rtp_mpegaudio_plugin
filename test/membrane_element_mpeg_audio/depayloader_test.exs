@@ -8,12 +8,16 @@ defmodule Membrane.RTP.MPEGAudio.DepayloaderTest do
       [state: %{}]
     end
 
-    test "returns error when incoming payload is not valid", %{state: state} do
-      invalid_buffer = %Buffer{payload: <<0::16>>}
-
-      assert_raise RuntimeError, ~r/Error.*invalid.*payload/, fn ->
-        Depayloader.handle_buffer(:input, invalid_buffer, nil, state)
+    test "drops incoming payload that is not valid", %{state: state} do
+      # too short
+      for payload <- [<<>>, <<0::16>>, <<0::24>>] do
+        assert Depayloader.handle_buffer(:input, %Buffer{payload: payload}, nil, state) ==
+                 {[], state}
       end
+
+      # non-zero MBZ field
+      invalid_buffer = %Buffer{payload: <<1::16, 0::16, 1, 2, 3>>}
+      assert Depayloader.handle_buffer(:input, invalid_buffer, nil, state) == {[], state}
     end
 
     test "with valid packed strips mbz and offset", %{state: state} do

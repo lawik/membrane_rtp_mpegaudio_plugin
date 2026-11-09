@@ -15,6 +15,7 @@ defmodule Membrane.RTP.MPEGAudio.Depayloader do
   Frag_offset: Byte offset into the audio frame for the data in this packet.
   """
   use Membrane.Filter
+  require Membrane.Logger
   alias Membrane.{Buffer, MPEGAudio, RemoteStream, RTP}
 
   def_input_pad :input,
@@ -39,7 +40,12 @@ defmodule Membrane.RTP.MPEGAudio.Depayloader do
     with %Buffer{payload: <<0::16, _offset::16, depayloaded::binary>>} <- buffer do
       {[buffer: {:output, %Buffer{buffer | payload: depayloaded}}], state}
     else
-      %Buffer{} -> raise "Error: invalid payload: #{inspect(buffer.payload)}"
+      # The payload comes from a remote peer, so a malformed packet (shorter than
+      # 4 bytes or with a non-zero MBZ field) is dropped instead of crashing the
+      # element (and the pipeline with it).
+      %Buffer{} ->
+        Membrane.Logger.warning("Dropping invalid RTP payload: #{inspect(buffer.payload)}")
+        {[], state}
     end
   end
 end
